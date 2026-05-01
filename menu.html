@@ -403,9 +403,53 @@
     margin-left: 18px;
     vertical-align: middle;
   }
+
+  /* ===== Coffee-bean cursor (menu page only, fine-pointer devices) =====
+     The body class .has-bean-cursor is added by JS only when (pointer:fine)
+     matches AND the asset successfully loads. That way phones/tablets fall
+     back to the native cursor and there's no flash of cursor:none if the
+     image 404s. */
+  body.has-bean-cursor,
+  body.has-bean-cursor a,
+  body.has-bean-cursor button,
+  body.has-bean-cursor .item { cursor: none; }
+
+  #bean-cursor {
+    position: fixed;
+    top: 0; left: 0;
+    width: 52px; height: 52px;
+    pointer-events: none;
+    z-index: 10000;
+    opacity: 0;
+    transform: translate3d(-200px, -200px, 0);
+    will-change: transform, width, height, opacity;
+    filter:
+      drop-shadow(0 6px 8px rgba(40, 24, 12, 0.32))
+      drop-shadow(0 1px 2px rgba(40, 24, 12, 0.45));
+    transition: width 0.18s ease, height 0.18s ease, opacity 0.2s ease;
+  }
+  body.has-bean-cursor #bean-cursor { opacity: 1; }
+  body.bean-out #bean-cursor { opacity: 0; }
+  body.bean-over-link #bean-cursor { width: 60px; height: 60px; }
+  #bean-cursor img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #bean-cursor { transition: opacity 0.2s ease; }
+  }
 </style>
 </head>
 <body>
+
+<!-- Coffee-bean cursor (visual only; pointer-events:none keeps clicks intact) -->
+<div id="bean-cursor" aria-hidden="true">
+  <img src="./assets/cursor-bean.png" alt="" draggable="false">
+</div>
 
 <!-- ============ NAV ============ -->
 <nav class="arka-nav">
@@ -1262,6 +1306,77 @@
       });
     });
   }
+
+  /* ===== Coffee-bean cursor ===== */
+  (function beanCursor() {
+    const fineMQ = matchMedia('(pointer: fine)');
+    if (!fineMQ.matches) return;
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const bean = document.getElementById('bean-cursor');
+    if (!bean) return;
+    const img = bean.querySelector('img');
+
+    // Only switch on the custom cursor once the asset has actually loaded —
+    // avoids a missing-image flash if the PNG is absent.
+    function enable() {
+      document.body.classList.add('has-bean-cursor');
+      requestAnimationFrame(tick);
+    }
+    if (img.complete && img.naturalWidth > 0) enable();
+    else {
+      img.addEventListener('load', enable, { once: true });
+      img.addEventListener('error', () => bean.remove(), { once: true });
+    }
+
+    let tx = -200, ty = -200;     // raw pointer
+    let cx = -200, cy = -200;     // smoothed
+    let rot = -12;                // current rotation
+    let scl = 1;                  // pressed scale
+    const REST_TILT = -12;
+    const MAX_TILT  = 18;
+    const VEL_GAIN  = 0.55;
+    const LERP      = reduceMotion ? 1   : 0.28;
+    const ROT_LERP  = reduceMotion ? 1   : 0.18;
+    const SCL_LERP  = reduceMotion ? 1   : 0.25;
+    const HALF      = 26;         // bean is 52px
+
+    window.addEventListener('pointermove', (e) => {
+      tx = e.clientX; ty = e.clientY;
+      document.body.classList.remove('bean-out');
+    }, { passive: true });
+    window.addEventListener('pointerdown', () => document.body.classList.add('bean-pressed'));
+    window.addEventListener('pointerup',   () => document.body.classList.remove('bean-pressed'));
+    document.documentElement.addEventListener('pointerleave', () => document.body.classList.add('bean-out'));
+    document.documentElement.addEventListener('pointerenter', () => document.body.classList.remove('bean-out'));
+
+    // Hover scale over interactive elements
+    document.addEventListener('pointerover', (e) => {
+      if (e.target.closest && e.target.closest('a, button, .item'))
+        document.body.classList.add('bean-over-link');
+    });
+    document.addEventListener('pointerout', (e) => {
+      if (e.target.closest && e.target.closest('a, button, .item'))
+        document.body.classList.remove('bean-over-link');
+    });
+
+    function tick() {
+      const px = cx;
+      cx += (tx - cx) * LERP;
+      cy += (ty - cy) * LERP;
+      const vx = cx - px;
+      // Lean toward direction of horizontal travel; reduced motion = no tilt
+      const targetRot = reduceMotion
+        ? REST_TILT
+        : REST_TILT + Math.max(-MAX_TILT, Math.min(MAX_TILT, vx * VEL_GAIN));
+      rot += (targetRot - rot) * ROT_LERP;
+      const targetScl = document.body.classList.contains('bean-pressed') ? 0.9 : 1;
+      scl += (targetScl - scl) * SCL_LERP;
+      bean.style.transform =
+        'translate3d(' + (cx - HALF) + 'px,' + (cy - HALF) + 'px,0) ' +
+        'rotate(' + rot.toFixed(2) + 'deg) scale(' + scl.toFixed(3) + ')';
+      requestAnimationFrame(tick);
+    }
+  })();
 </script>
 
 </body>
