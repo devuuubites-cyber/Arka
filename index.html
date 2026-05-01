@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Arka — Coffee. Conversations. Connections.</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+  /* ---------- Landing-specific ---------- */
+  body { background: #0c0a09; cursor: default; }
+
+  /* The walk. We use 700vh of scroll, sticky stage holds the camera */
+  .walk-track { height: 700vh; position: relative; }
+  .stage {
+    position: sticky; top: 0;
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+    background: #07060a;
+  }
+
+  /* Layered backplates — depth-stacked images that translateZ on scroll */
+  .scene {
+    position: absolute;
+    inset: 0;
+    transform-style: preserve-3d;
+    will-change: transform;
+  }
+  .layer {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    will-change: transform, opacity, filter;
+    z-index: 10;
+  }
+
+  /* Atmospheric depth fog — vignette overlay */
+  .fog {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 55%, transparent 0%, transparent 35%, rgba(0,0,0,0.55) 75%, rgba(0,0,0,0.92) 100%),
+      linear-gradient(180deg, rgba(7,6,10,0.4) 0%, transparent 30%, transparent 70%, rgba(7,6,10,0.7) 100%);
+    z-index: 30;
+  }
+  .grain {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    opacity: 0.08;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' /%3E%3C/svg%3E");
+    z-index: 35;
+  }
+
+  /* Ambient particles (dust/embers) */
+  .particles { position: absolute; inset: 0; pointer-events: none; z-index: 25; }
+  .particle {
+    position: absolute;
+    width: 2px; height: 2px;
+    border-radius: 50%;
+    background: rgba(201,183,159,0.7);
+    box-shadow: 0 0 6px rgba(201,183,159,0.5);
+    animation: drift linear infinite;
+  }
+  @keyframes drift {
+    0%   { transform: translate(0, 100vh) scale(.6); opacity: 0; }
+    8%   { opacity: 0.7; }
+    50%  { opacity: 0.9; }
+    92%  { opacity: 0.6; }
+    100% { transform: translate(40px, -120px) scale(.4); opacity: 0; }
+  }
+
+  /* Hero wordmark — big, fades on walk */
+  .hero-mark {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    pointer-events: none;
+    mix-blend-mode: screen;
+  }
+  .hero-mark .symbol {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: clamp(120px, 22vw, 320px);
+    line-height: 0.85;
+    color: #f7e8c8;
+    letter-spacing: -0.06em;
+    position: relative;
+    text-shadow: 0 0 60px rgba(247,232,200,0.25);
+  }
+  .hero-mark .symbol::after {
+    content: '.';
+    font-style: normal;
+    font-size: 0.32em;
+    position: absolute;
+    right: -0.18em;
+    bottom: 0.18em;
+  }
+  .hero-mark .word {
+    margin-top: 12px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(64px, 12vw, 180px);
+    line-height: 0.9;
+    letter-spacing: 0.18em;
+    color: #f7e8c8;
+    font-weight: 400;
+    text-shadow: 0 0 40px rgba(247,232,200,0.2);
+  }
+  .hero-mark .tag {
+    margin-top: 30px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.55em;
+    color: rgba(247,232,200,0.75);
+    text-transform: uppercase;
+  }
+
+  /* Step content (text overlays tied to scroll depth) */
+  .step {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 60;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 1s ease, transform 1s ease, filter 1s ease;
+    filter: blur(8px);
+    text-align: center;
+    padding: 0 6vw;
+  }
+  .step.in {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+  .step .index {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.5em;
+    color: rgba(201,183,159,0.7);
+    text-transform: uppercase;
+    margin-bottom: 26px;
+  }
+  .step h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 400;
+    font-size: clamp(48px, 7.2vw, 110px);
+    line-height: 1.02;
+    letter-spacing: -0.01em;
+    color: #f7e8c8;
+    max-width: 16ch;
+    text-wrap: pretty;
+  }
+  .step h2 em {
+    font-style: italic;
+    color: var(--bronze);
+    font-weight: 400;
+  }
+  .step p {
+    margin-top: 28px;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 300;
+    font-size: 14px;
+    line-height: 1.7;
+    letter-spacing: 0.12em;
+    color: rgba(245,242,237,0.7);
+    max-width: 48ch;
+    text-transform: uppercase;
+  }
+
+  /* Step alignments — give variety to break "centered slide" feeling */
+  .step.left  { justify-content: flex-start; text-align: left; padding-left: 7vw; }
+  .step.right { justify-content: flex-end; text-align: right; padding-right: 7vw; }
+  .step.left .inner, .step.right .inner { max-width: 620px; }
+
+  /* Side caption (depth marker, like camera HUD) */
+  .hud {
+    position: fixed;
+    bottom: 30px;
+    left: 44px;
+    right: 44px;
+    z-index: 90;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    pointer-events: none;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    color: rgba(245,242,237,0.55);
+    text-transform: uppercase;
+  }
+  .hud .progress {
+    width: 220px;
+    height: 1px;
+    background: rgba(245,242,237,0.15);
+    position: relative;
+    margin: 0 24px 4px;
+    flex: 1;
+    max-width: 380px;
+  }
+  .hud .progress::after {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; height: 1px;
+    width: var(--p, 0%);
+    background: rgba(247,232,200,0.85);
+    transition: width .15s linear;
+  }
+  .hud .stage-label {
+    transition: opacity .4s;
+  }
+
+  /* Scroll cue */
+  .scroll-cue {
+    position: absolute;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 70;
+    text-align: center;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.45em;
+    color: rgba(247,232,200,0.6);
+    text-transform: uppercase;
+    transition: opacity .6s;
+  }
+  .scroll-cue .line {
+    width: 1px;
+    height: 60px;
+    background: linear-gradient(to bottom, transparent, rgba(247,232,200,0.7), transparent);
+    margin: 12px auto 0;
+    animation: cueDrift 2.6s ease-in-out infinite;
+  }
+  @keyframes cueDrift {
+    0%, 100% { transform: translateY(0); opacity: 0.4; }
+    50%      { transform: translateY(8px); opacity: 1; }
+  }
+
+  /* Final panel — appears after the walk completes */
+  .arrival {
+    position: absolute;
+    inset: 0;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 1.2s ease;
+  }
+  .arrival.in {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .arrival-card {
+    width: min(92vw, 720px);
+    padding: 56px 60px 52px;
+    border-radius: 28px;
+    color: var(--cream);
+    text-align: center;
+  }
+  .arrival-card .eyebrow {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.5em;
+    color: rgba(247,232,200,0.7);
+    text-transform: uppercase;
+  }
+  .arrival-card h3 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 400;
+    font-size: clamp(40px, 5vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+    margin-top: 22px;
+  }
+  .arrival-card h3 em { font-style: italic; color: var(--sand); }
+  .arrival-card p {
+    margin-top: 22px;
+    font-size: 13px;
+    line-height: 1.85;
+    letter-spacing: 0.06em;
+    color: rgba(245,242,237,0.75);
+    max-width: 44ch;
+    margin-left: auto; margin-right: auto;
+  }
+  .arrival-actions {
+    margin-top: 38px;
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 28px;
+    border-radius: 999px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all .35s ease;
+  }
+  .btn.solid {
+    background: var(--cream);
+    color: var(--ink);
+  }
+  .btn.solid:hover { background: #fff; transform: translateY(-1px); }
+  .btn.ghost {
+    background: transparent;
+    color: var(--cream);
+    border-color: rgba(245,242,237,0.3);
+  }
+  .btn.ghost:hover { border-color: var(--cream); background: rgba(255,255,255,0.05); }
+  .btn .arrow {
+    width: 14px; height: 14px;
+    border-top: 1px solid currentColor;
+    border-right: 1px solid currentColor;
+    transform: rotate(45deg);
+    margin-left: 4px;
+    transition: transform .35s;
+  }
+  .btn:hover .arrow { transform: rotate(45deg) translate(2px, -2px); }
+
+  /* Footer arrives below the walk */
+  .arka-footer {
+    background: #0c0a09;
+    color: var(--cream);
+    padding: 100px 6vw 40px;
+    border-top: 1px solid rgba(245,242,237,0.08);
+    position: relative;
+    z-index: 1;
+  }
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    gap: 60px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .footer-grid h4 {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    color: rgba(245,242,237,0.5);
+    text-transform: uppercase;
+    margin-bottom: 22px;
+    font-weight: 400;
+  }
+  .footer-grid ul { list-style: none; }
+  .footer-grid li { margin-bottom: 12px; font-size: 14px; font-family: 'Cormorant Garamond', serif; opacity: 0.85; }
+  .footer-grid li a { transition: opacity .25s; }
+  .footer-grid li a:hover { opacity: 0.6; }
+  .footer-brand .logo {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 56px;
+    line-height: 1;
+    letter-spacing: 0.04em;
+  }
+  .footer-brand .tagline {
+    margin-top: 16px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    color: rgba(245,242,237,0.55);
+    text-transform: uppercase;
+  }
+  .footer-brand p {
+    margin-top: 22px;
+    font-size: 13px;
+    line-height: 1.75;
+    color: rgba(245,242,237,0.65);
+    max-width: 36ch;
+  }
+  .socials {
+    display: flex;
+    gap: 14px;
+    margin-top: 26px;
+  }
+  .social-btn {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    border: 1px solid rgba(245,242,237,0.2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .3s ease;
+    color: var(--cream);
+    cursor: pointer;
+  }
+  .social-btn:hover { border-color: var(--sand); color: var(--sand); transform: translateY(-2px); }
+  .social-btn svg { width: 16px; height: 16px; }
+  .footer-bottom {
+    max-width: 1400px;
+    margin: 80px auto 0;
+    padding-top: 30px;
+    border-top: 1px solid rgba(245,242,237,0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    color: rgba(245,242,237,0.45);
+    text-transform: uppercase;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  /* Skip walk button */
+  .skip-walk {
+    position: fixed;
+    bottom: 28px;
+    right: 32px;
+    z-index: 95;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: rgba(247,232,200,0.5);
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    transition: color .3s;
+    padding: 8px 12px;
+  }
+  .skip-walk:hover { color: var(--cream); }
+
+  /* Image-on-scene treatment — desaturate slightly until "in focus" */
+  .layer.deep   { filter: brightness(0.45) saturate(0.7) blur(1px); transform: scale(1.15); }
+  .layer.mid    { filter: brightness(0.55) saturate(0.8); transform: scale(1.08); }
+  .layer.near   { filter: brightness(0.7) saturate(0.9);  }
+
+  /* "Walking" sway — tiny continuous camera bob */
+  @keyframes walk-bob {
+    0%, 100% { transform: translate3d(0, 0, 0) rotateZ(0); }
+    25%      { transform: translate3d(-3px, -1.5px, 0) rotateZ(0.12deg); }
+    50%      { transform: translate3d(0, -3px, 0) rotateZ(0); }
+    75%      { transform: translate3d(3px, -1.5px, 0) rotateZ(-0.12deg); }
+  }
+  .stage-inner {
+    position: absolute;
+    inset: 0;
+    animation: walk-bob 5.2s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  @media (max-width: 720px) {
+    .footer-grid { grid-template-columns: 1fr 1fr; }
+    .arka-nav { padding: 22px 24px; }
+    .arka-nav .links { display: none; }
+    .hud { left: 24px; right: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav class="arka-nav">
+  <a href="index.html" class="wordmark">
+    <span class="serif">Arka</span><sup>©</sup>
+  </a>
+  <div class="links">
+    <a href="index.html" class="active">Home</a>
+    <a href="menu.html">Menu</a>
+    <a href="the-place.html">The Place</a>
+    <a href="#contact">Contact</a>
+  </div>
+</nav>
+
+<!-- ============ THE WALK ============ -->
+<div class="walk-track" id="walkTrack">
+  <div class="stage" id="stage">
+    <div class="stage-inner">
+
+      <!-- Scenes are layered backdrops; each fades in at its scroll range -->
+      <div class="scene" id="scenes">
+        <!-- Scene 1: dim entrance — out the window, dusk/nightfall -->
+        <div class="layer deep" data-scene="0" style="background-image: linear-gradient(180deg, #0a0807 0%, #1a1410 60%, #2a1d14 100%);"></div>
+        <!-- Scene 2: doorway / threshold -->
+        <div class="layer mid" data-scene="1" data-img="threshold" style="background: radial-gradient(ellipse at 50% 65%, #6b4a30 0%, #3d2818 35%, #150d08 75%, #07050a 100%);"></div>
+        <!-- Scene 3: interior — tables and chairs (reused brand image style) -->
+        <div class="layer near" data-scene="2" data-img="interior" style="background: radial-gradient(ellipse at 35% 50%, #c9a37a 0%, #8a6f4e 25%, #3a2a1c 60%, #100a08 100%);"></div>
+        <!-- Scene 4: at the bar — coffee grinder / barista -->
+        <div class="layer near" data-scene="3" data-img="bar" style="background: radial-gradient(ellipse at 55% 55%, #d4a87a 0%, #7a5a38 22%, #2a1d12 55%, #08060a 100%);"></div>
+        <!-- Scene 5: the cup — close-up -->
+        <div class="layer near" data-scene="4" data-img="cup" style="background: radial-gradient(circle at 50% 55%, #f7e8c8 0%, #c9a37a 8%, #6b4a30 22%, #1a120c 55%, #07050a 100%);"></div>
+        <!-- Scene 6: the rest — quiet moment, plant light -->
+        <div class="layer near" data-scene="5" data-img="rest" style="background: radial-gradient(ellipse at 70% 40%, #c9b79f 0%, #8a6f4e 18%, #2f2a27 50%, #0c0a09 100%);"></div>
+      </div>
+
+      <!-- Particles -->
+      <div class="particles" id="particles"></div>
+
+      <!-- Fog overlay -->
+      <div class="fog"></div>
+      <div class="grain"></div>
+
+      <!-- HERO -->
+      <div class="hero-mark" id="hero">
+        <div class="symbol serif" aria-hidden="true">A<span style="font-style:normal">r</span>ka</div>
+        <div class="tag">Coffee · Conversations · Connections</div>
+      </div>
+
+      <!-- Walk steps — content tied to scroll depth -->
+      <div class="step left" data-step="1">
+        <div class="inner">
+          <div class="index">01 — Approach</div>
+          <h2>You walk in <em>without thinking</em>, and the noise outside falls away.</h2>
+          <p>One door. A held breath. A different temperature.</p>
+        </div>
+      </div>
+
+      <div class="step" data-step="2">
+        <div class="inner">
+          <div class="index">02 — Inside</div>
+          <h2>A room <em>built for slowness</em> — wood, plant-light, soft chairs.</h2>
+          <p>No queue energy. No hurry. Just somewhere to sit.</p>
+        </div>
+      </div>
+
+      <div class="step right" data-step="3">
+        <div class="inner">
+          <div class="index">03 — At the Bar</div>
+          <h2>Beans ground <em>this morning</em>. Water at the right temperature. A barista who notices.</h2>
+          <p>Single origin. House blend. Whatever you take it like.</p>
+        </div>
+      </div>
+
+      <div class="step" data-step="4">
+        <div class="inner">
+          <div class="index">04 — The Cup</div>
+          <h2>The first sip is <em>quieter</em> than you expected.</h2>
+          <p>That's the point.</p>
+        </div>
+      </div>
+
+      <div class="step left" data-step="5">
+        <div class="inner">
+          <div class="index">05 — Stay a While</div>
+          <h2>Read something. Talk to someone. <em>Or don't.</em></h2>
+          <p>You'll know when it's time to go.</p>
+        </div>
+      </div>
+
+      <!-- Arrival panel — appears at end of walk -->
+      <div class="arrival" id="arrival">
+        <div class="arrival-card liquid-glass">
+          <div class="eyebrow">— You've Arrived —</div>
+          <h3>Welcome to <em>Arka</em>.</h3>
+          <p>You can sit anywhere. The menu is simple, the coffee is honest, and the conversation is yours.</p>
+          <div class="arrival-actions">
+            <a href="menu.html" class="btn solid">Open the Menu <span class="arrow"></span></a>
+            <a href="welcome.html" class="btn ghost">Read More <span class="arrow"></span></a>
+          </div>
+        </div>
+      </div>
+
+      <!-- HUD: depth, distance walked -->
+      <div class="hud">
+        <div class="stage-label" id="hudLabel">— PROLOGUE —</div>
+        <div class="progress" id="hudProgress"></div>
+        <div>0651 / Collection 2K26</div>
+      </div>
+
+      <!-- Scroll cue (only at very start) -->
+      <div class="scroll-cue" id="scrollCue">
+        Scroll to walk in
+        <div class="line"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<button class="skip-walk" id="skipWalk">Skip the Walk →</button>
+
+<!-- ============ FOOTER ============ -->
+<footer class="arka-footer" id="contact">
+  <div class="footer-grid">
+    <div class="footer-brand">
+      <div class="logo serif">Arka</div>
+      <div class="tagline">Coffee · Conversations · Connections</div>
+      <p>A room for slow mornings, late afternoons, and the kind of conversations that don't end when the cup does.</p>
+      <div class="socials">
+        <a href="#" class="social-btn" aria-label="Instagram">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.8" fill="currentColor"/></svg>
+        </a>
+        <a href="#" class="social-btn" aria-label="Facebook">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 7h2V4h-2.5C11.6 4 10 5.6 10 7.5V10H8v3h2v8h3v-8h2.5l.5-3H13V8c0-.6.4-1 1-1z"/></svg>
+        </a>
+        <a href="#" class="social-btn" aria-label="WhatsApp">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 21l1.6-4.5a8 8 0 1 1 3 3L3 21z"/><path d="M9 11c.5 1.5 2 3 3.5 3.5l1.5-1 2 1c0 1-.5 2-2 2-3 0-6-3-6-6 0-1.5 1-2 2-2l1 2-1 1.5z" fill="currentColor" stroke="none"/></svg>
+        </a>
+        <a href="#" class="social-btn" aria-label="X / Twitter">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 3h3l-7.5 8.6L22 21h-6.8l-5-6.5L4.5 21H1.5l8-9.2L1 3h6.9l4.5 6 5.6-6z"/></svg>
+        </a>
+        <a href="#" class="social-btn" aria-label="TikTok">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 4v9.5a3.5 3.5 0 1 1-3.5-3.5"/><path d="M14 4c.5 2 2 3.5 4.5 4"/></svg>
+        </a>
+      </div>
+    </div>
+
+    <div>
+      <h4>Visit</h4>
+      <ul>
+        <li>Open · 8 AM — 11 PM</li>
+        <li>Every day, including holidays</li>
+        <li>Last order · 10:30 PM</li>
+        <li><a href="#">Get Directions →</a></li>
+      </ul>
+    </div>
+
+    <div>
+      <h4>Reach Out</h4>
+      <ul>
+        <li><a href="#">hello@arka.cafe</a></li>
+        <li><a href="#">+91 · — — —</a></li>
+        <li><a href="#">Reservations</a></li>
+        <li><a href="#">Private Events</a></li>
+      </ul>
+    </div>
+
+    <div>
+      <h4>Wander</h4>
+      <ul>
+        <li><a href="menu.html">Menu</a></li>
+        <li><a href="the-place.html">The Place</a></li>
+        <li><a href="#">Stories</a></li>
+        <li><a href="#">Careers</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer-bottom">
+    <div>© 2K26 Arka — All rights reserved</div>
+    <div>Coffee. Conversations. Connections.</div>
+    <div>Made slowly</div>
+  </div>
+</footer>
+
+<script>
+  // Swallow harmless ResizeObserver loop warning
+  window.addEventListener('error', (e) => {
+    if (e.message && e.message.includes('ResizeObserver loop')) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+    }
+  });
+
+  /* ============ The Walk Engine ============ */
+
+  // Cinematic CSS scenes (always render, no network)
+  const SCENE_GRADS = {
+    threshold: 'radial-gradient(ellipse at 50% 65%, #6b4a30 0%, #3d2818 35%, #150d08 75%, #07050a 100%)',
+    interior:  'radial-gradient(ellipse at 35% 50%, #c9a37a 0%, #8a6f4e 25%, #3a2a1c 60%, #100a08 100%), linear-gradient(180deg, #1a120c 0%, #2a1c12 100%)',
+    bar:       'radial-gradient(ellipse at 55% 55%, #d4a87a 0%, #7a5a38 22%, #2a1d12 55%, #08060a 100%)',
+    cup:       'radial-gradient(circle at 50% 55%, #f7e8c8 0%, #c9a37a 8%, #6b4a30 22%, #1a120c 55%, #07050a 100%)',
+    rest:      'radial-gradient(ellipse at 70% 40%, #c9b79f 0%, #8a6f4e 18%, #2f2a27 50%, #0c0a09 100%)',
+  };
+
+  document.querySelectorAll('.layer[data-img]').forEach(el => {
+    const k = el.dataset.img;
+    if (SCENE_GRADS[k] && !el.style.background) {
+      el.style.background = SCENE_GRADS[k];
+    }
+  });
+
+  // Particles
+  const particles = document.getElementById('particles');
+  for (let i = 0; i < 30; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    p.style.left = Math.random() * 100 + '%';
+    p.style.animationDuration = (12 + Math.random() * 18) + 's';
+    p.style.animationDelay = (-Math.random() * 30) + 's';
+    p.style.opacity = (0.4 + Math.random() * 0.6);
+    p.style.transform = `scale(${0.5 + Math.random() * 1.4})`;
+    particles.appendChild(p);
+  }
+
+  // Walk
+  const track = document.getElementById('walkTrack');
+  const heroMark = document.getElementById('hero');
+  const scrollCue = document.getElementById('scrollCue');
+  const arrival = document.getElementById('arrival');
+  const layers = [...document.querySelectorAll('.layer')];
+  const steps = [...document.querySelectorAll('.step')];
+  const hudLabel = document.getElementById('hudLabel');
+  const hudProgress = document.getElementById('hudProgress');
+
+  // Each layer is a depth slice. We want one to dominate per scroll range.
+  // Ranges in [0..1] of total walk progress.
+  const layerRanges = [
+    [0.00, 0.18], // 0
+    [0.05, 0.30], // 1
+    [0.20, 0.45], // 2
+    [0.40, 0.65], // 3
+    [0.60, 0.82], // 4
+    [0.78, 1.00], // 5
+  ];
+  const stepRanges = [
+    [0.04, 0.18], // 1
+    [0.20, 0.34], // 2
+    [0.40, 0.54], // 3
+    [0.58, 0.70], // 4
+    [0.74, 0.88], // 5
+  ];
+  const stageLabels = [
+    [0.00, 0.10, '— PROLOGUE —'],
+    [0.10, 0.30, '— THRESHOLD —'],
+    [0.30, 0.55, '— THE ROOM —'],
+    [0.55, 0.74, '— THE BAR —'],
+    [0.74, 0.92, '— THE CUP —'],
+    [0.92, 1.01, '— ARRIVAL —'],
+  ];
+
+  function smoothstep(a, b, t) {
+    if (b === a) return 0;
+    const x = Math.max(0, Math.min(1, (t - a) / (b - a)));
+    return x * x * (3 - 2 * x);
+  }
+
+  // Inertia: keep an interpolated progress that lags real scroll
+  let realP = 0, smoothP = 0;
+  function onScroll() {
+    const trackRect = track.getBoundingClientRect();
+    const total = trackRect.height - window.innerHeight;
+    const scrolled = -trackRect.top;
+    realP = Math.max(0, Math.min(1, scrolled / total));
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  function loop() {
+    smoothP += (realP - smoothP) * 0.085; // inertia
+    render(smoothP);
+    requestAnimationFrame(loop);
+  }
+
+  function render(p) {
+    // Hero fades out as walk begins
+    const heroOp = 1 - smoothstep(0.0, 0.06, p);
+    heroMark.style.opacity = heroOp;
+    heroMark.style.transform = `translateY(${-p * 60}px) scale(${1 - p * 0.06})`;
+    if (scrollCue) scrollCue.style.opacity = heroOp;
+
+    // Scene crossfade: each layer's opacity peaks within its range
+    layers.forEach((el, i) => {
+      const [a, b] = layerRanges[i];
+      let op = 0;
+      if (p >= a && p <= b) {
+        const mid = (a + b) / 2;
+        const half = (b - a) / 2;
+        const d = Math.abs(p - mid) / half;
+        op = 1 - d * d; // peak in middle
+      }
+      // Forward zoom — layer scales up as we "walk past" it
+      const localT = Math.max(0, Math.min(1, (p - a) / (b - a)));
+      const scale = 1.02 + localT * 0.18;
+      el.style.opacity = Math.max(0, op);
+      el.style.transform = `scale(${scale})`;
+    });
+
+    // Steps in/out
+    steps.forEach((el, i) => {
+      const [a, b] = stepRanges[i];
+      const visible = (p >= a - 0.01 && p <= b + 0.01);
+      el.classList.toggle('in', visible);
+    });
+
+    // HUD
+    hudProgress.style.setProperty('--p', (p * 100) + '%');
+    const stage = stageLabels.find(([a, b]) => p >= a && p < b);
+    if (stage) hudLabel.textContent = stage[2];
+
+    // Arrival
+    arrival.classList.toggle('in', p > 0.92);
+  }
+
+  loop();
+
+  // Skip
+  document.getElementById('skipWalk').addEventListener('click', () => {
+    const dest = track.offsetTop + track.offsetHeight - window.innerHeight - 1;
+    window.scrollTo({ top: dest, behavior: 'smooth' });
+  });
+
+  // Char reveal on hero text (fancy)
+  function splitChars(el) {
+    const text = el.textContent;
+    el.textContent = '';
+    [...text].forEach((ch, i) => {
+      const s = document.createElement('span');
+      s.className = 'reveal-char';
+      s.textContent = ch === ' ' ? '\u00A0' : ch;
+      s.style.transitionDelay = (i * 40) + 'ms';
+      el.appendChild(s);
+      requestAnimationFrame(() => requestAnimationFrame(() => s.classList.add('in')));
+    });
+  }
+  // (kept simple; characters reveal on load via CSS transition delays)
+</script>
+
+</body>
+</html>
