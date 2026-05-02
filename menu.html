@@ -417,7 +417,7 @@
   #bean-cursor {
     position: fixed;
     top: 0; left: 0;
-    width: 52px; height: 52px;
+    width: 40px; height: 54px;        /* matches the 430x580 PNG aspect */
     pointer-events: none;
     z-index: 10000;
     opacity: 0;
@@ -430,10 +430,11 @@
   }
   body.has-bean-cursor #bean-cursor { opacity: 1; }
   body.bean-out #bean-cursor { opacity: 0; }
-  body.bean-over-link #bean-cursor { width: 60px; height: 60px; }
+  body.bean-over-link #bean-cursor { width: 46px; height: 62px; }   /* 1.15x */
   #bean-cursor img {
     width: 100%;
     height: 100%;
+    object-fit: contain;
     display: block;
     user-select: none;
     -webkit-user-drag: none;
@@ -1248,7 +1249,7 @@
   <h3>Hungry yet?</h3>
   <p>— Reserve a table or just walk in —</p>
   <div class="menu-foot-actions">
-    <a href="welcome.html" class="btn solid">Read About the Place →</a>
+    <a href="the-place.html" class="btn solid">Read About the Place →</a>
     <a href="index.html" class="btn ghost">Back to the Walk →</a>
   </div>
 </section>
@@ -1309,8 +1310,10 @@
 
   /* ===== Coffee-bean cursor ===== */
   (function beanCursor() {
-    const fineMQ = matchMedia('(pointer: fine)');
-    if (!fineMQ.matches) return;
+    // (any-pointer: fine) is true on desktop, on iPad-with-trackpad, and on
+    // iPad/iPhone when an Apple Pencil is paired. (pointer: fine) misses the
+    // last case because iPadOS reports the *primary* pointer as touch.
+    if (!matchMedia('(any-pointer: fine)').matches) return;
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const bean = document.getElementById('bean-cursor');
     if (!bean) return;
@@ -1338,7 +1341,8 @@
     const LERP      = reduceMotion ? 1   : 0.28;
     const ROT_LERP  = reduceMotion ? 1   : 0.18;
     const SCL_LERP  = reduceMotion ? 1   : 0.25;
-    const HALF      = 26;         // bean is 52px
+    const HALF_W    = 20;         // bean is 40px wide
+    const HALF_H    = 27;         // bean is 54px tall
 
     window.addEventListener('pointermove', (e) => {
       tx = e.clientX; ty = e.clientY;
@@ -1372,7 +1376,7 @@
       const targetScl = document.body.classList.contains('bean-pressed') ? 0.9 : 1;
       scl += (targetScl - scl) * SCL_LERP;
       bean.style.transform =
-        'translate3d(' + (cx - HALF) + 'px,' + (cy - HALF) + 'px,0) ' +
+        'translate3d(' + (cx - HALF_W) + 'px,' + (cy - HALF_H) + 'px,0) ' +
         'rotate(' + rot.toFixed(2) + 'deg) scale(' + scl.toFixed(3) + ')';
       requestAnimationFrame(tick);
     }
